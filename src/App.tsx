@@ -36,6 +36,7 @@ import {
 import { Product, CartItem, Review } from './types.js';
 import { productsList, reviewsList } from './data.js';
 import TransparentLogo from './components/TransparentLogo.js';
+import { uploadProductImage } from './firebase-storage.js';
 
 export const parseImageClassNameToStyle = (classNameStr: string = ''): React.CSSProperties => {
   const style: React.CSSProperties = {
@@ -408,27 +409,49 @@ export default function App() {
     setImgOffsetY(Math.round(newY));
   };
 
-  const handleImageFile = (file: File) => {
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const MAX_SIZE = 1920;
+        let w = img.width, h = img.height;
+        if (w > MAX_SIZE || h > MAX_SIZE) {
+          if (w > h) { h = Math.round(h * MAX_SIZE / w); w = MAX_SIZE; }
+          else { w = Math.round(w * MAX_SIZE / h); h = MAX_SIZE; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          resolve(blob ? new File([blob], file.name, { type: 'image/jpeg' }) : file);
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  };
+
+  const handleImageFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setProductFormError('Допустимы только файлы изображений (PNG, JPG, JPEG, WEBP).');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setProductFormError('Файл слишком большой. Рекомендуемый размер до 10 МБ.');
+    if (file.size > 50 * 1024 * 1024) {
+      setProductFormError('Файл слишком большой. Максимум 50 МБ.');
       return;
     }
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setProductForm(prev => ({ ...prev, imageSrc: e.target!.result as string }));
-        setProductFormError('');
-      }
-    };
-    reader.onerror = () => {
-      setProductFormError('Ошибка чтения файла изображения.');
-    };
-    reader.readAsDataURL(file);
+    setProductFormError('Сжатие и загрузка фото...');
+    try {
+      const compressed = await compressImage(file);
+      const url = await uploadProductImage(compressed);
+      setProductForm(prev => ({ ...prev, imageSrc: url }));
+      setProductFormError('');
+    } catch (e) {
+      setProductFormError('Ошибка загрузки. Проверьте правила Firebase Storage.');
+    }
   };
 
   const fetchProducts = async () => {
