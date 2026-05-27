@@ -455,7 +455,11 @@ export default function App() {
   };
 
   const fetchProducts = async () => {
-    setProducts(productsList);
+    try {
+      const res = await fetch('/api/products');
+      const data = await res.json();
+      if (Array.isArray(data)) setProducts(data);
+    } catch { setProducts(productsList); }
   };
 
   const fetchCategories = async () => {
