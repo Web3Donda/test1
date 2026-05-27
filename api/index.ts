@@ -1,20 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, setDoc, getDoc, deleteDoc, orderBy, query } from 'firebase/firestore';
+import { createClient } from '@supabase/supabase-js';
 
-const firebaseConfig = {
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  appId: process.env.FIREBASE_APP_ID,
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-};
-
-function getDb() {
-  const app = getApps()[0] || initializeApp(firebaseConfig);
-  return getFirestore(app, process.env.FIREBASE_DATABASE_ID || '(default)');
-}
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_KEY!
+);
 
 function getFormattedDate() {
   const d = new Date();
@@ -32,73 +22,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const method = req.method || 'GET';
 
   try {
-    const db = getDb();
-
     // GET /api/products
     if (url === '/api/products' && method === 'GET') {
-      const snap = await getDocs(query(collection(db, 'products'), orderBy('order')));
-      return res.json(snap.docs.map(d => d.data()));
+      const { data } = await supabase.from('products').select('*').order('order');
+      return res.json(data || []);
     }
 
     // POST /api/products
     if (url === '/api/products' && method === 'POST') {
       const { name, description, price, category, composition, tags, imageSrc, popular, imageClassName } = req.body;
       if (!name || price === undefined) return res.status(400).json({ error: 'Имя и цена обязательны.' });
-      const snap = await getDocs(collection(db, 'products'));
+      const { count } = await supabase.from('products').select('*', { count: 'exact', head: true });
       const id = `prod-${Date.now()}`;
       const newProduct = {
-        id, name,
-        description: description || '',
-        price: Number(price),
-        imageSrc: imageSrc || '',
-        category: category || 'flowers',
-        composition: Array.isArray(composition) ? composition : (composition ? composition.split(',').map((s: string) => s.trim()) : []),
-        tags: Array.isArray(tags) ? tags : (tags ? tags.split(',').map((s: string) => s.trim()) : []),
-        rating: 5.0,
-        popular: !!popular,
+        id, name, description: description || '', price: Number(price),
+        imageSrc: imageSrc || '', category: category || 'flowers',
+        composition: composition || [], tags: tags || [],
+        rating: 5.0, popular: !!popular,
         imageClassName: imageClassName || 'object-cover',
-        order: snap.size,
+        order: count || 0,
       };
-      await setDoc(doc(db, 'products', id), newProduct);
+      await supabase.from('products').insert(newProduct);
       return res.json({ success: true, product: newProduct });
     }
 
     // PUT /api/products/:id
     const productMatch = url.match(/^\/api\/products\/([^/]+)$/);
     if (productMatch && method === 'PUT') {
-      const id = productMatch[1];
-      const docRef = doc(db, 'products', id);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) return res.status(404).json({ error: 'Товар не найден.' });
-      const updated = { ...docSnap.data(), ...req.body };
-      await setDoc(docRef, updated);
-      return res.json({ success: true, product: updated });
+      const { data } = await supabase.from('products').update(req.body).eq('id', productMatch[1]).select().single();
+      return res.json({ success: true, product: data });
     }
 
     // DELETE /api/products/:id
     if (productMatch && method === 'DELETE') {
-      await deleteDoc(doc(db, 'products', productMatch[1]));
+      await supabase.from('products').delete().eq('id', productMatch[1]);
       return res.json({ success: true });
     }
 
     // POST /api/products/reorder
     if (url === '/api/products/reorder' && method === 'POST') {
-      const { orders } = req.body;
-      for (const item of (orders || [])) {
-        const docRef = doc(db, 'products', item.id);
-        const snap = await getDoc(docRef);
-        if (snap.exists()) await setDoc(docRef, { ...snap.data(), order: Number(item.order) });
+      for (const item of (req.body.orders || [])) {
+        await supabase.from('products').update({ order: Number(item.order) }).eq('id', item.id);
       }
       return res.json({ success: true });
     }
 
     // GET /api/orders
     if (url === '/api/orders' && method === 'GET') {
-      const snap = await getDocs(collection(db, 'orders'));
-      const list = snap.docs.map(d => d.data()).sort((a: any, b: any) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      return res.json(list);
+      const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      return res.json(data || []);
     }
 
     // POST /api/order
@@ -107,80 +79,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!customerName || !customerPhone) return res.status(400).json({ error: 'Заполните имя и телефон.' });
       const orderId = `ELZ-${Math.floor(100000 + Math.random() * 900000)}`;
       const newOrder = {
-        orderId, customerName, customerPhone,
-        deliveryType: deliveryType || 'delivery',
-        address: address || '',
-        date: date || 'Сегодня',
-        time: time || 'В ближайшее время',
-        cardMessage: cardMessage || '',
-        totalPrice: totalPrice || 0,
-        items: items || [],
-        status: 'pending',
-        statusLog: [{ status: 'pending', timestamp: getFormattedDate(), note: 'Заказ оформлен на сайте.' }],
-        createdAt: new Date().toISOString(),
-        paymentMethod: paymentMethod || 'cash',
-        paymentStatus: 'pending_confirmation',
+        order_id: orderId, customer_name: customerName, customer_phone: customerPhone,
+        delivery_type: deliveryType || 'delivery', address: address || '',
+        date: date || 'Сегодня', time: time || 'В ближайшее время',
+        card_message: cardMessage || '', total_price: totalPrice || 0,
+        items: items || [], status: 'pending',
+        status_log: [{ status: 'pending', timestamp: getFormattedDate(), note: 'Заказ оформлен на сайте.' }],
+        payment_method: paymentMethod || 'cash', payment_status: 'pending_confirmation',
       };
-      await setDoc(doc(db, 'orders', orderId), newOrder);
+      await supabase.from('orders').insert(newOrder);
       return res.json({ success: true, orderId, message: `Спасибо, ${customerName}! Менеджер свяжется с вами.` });
     }
 
     // GET /api/order/:id
     const orderMatch = url.match(/^\/api\/order\/([^/]+)$/);
     if (orderMatch && method === 'GET') {
-      const docSnap = await getDoc(doc(db, 'orders', orderMatch[1]));
-      if (!docSnap.exists()) return res.status(404).json({ error: 'Заказ не найден.' });
-      return res.json(docSnap.data());
+      const { data } = await supabase.from('orders').select('*').eq('order_id', orderMatch[1]).single();
+      if (!data) return res.status(404).json({ error: 'Заказ не найден.' });
+      return res.json(data);
     }
 
     // POST /api/orders/:id/status
     const statusMatch = url.match(/^\/api\/orders\/([^/]+)\/status$/);
     if (statusMatch && method === 'POST') {
       const { status, note, paymentStatus } = req.body;
-      const docRef = doc(db, 'orders', statusMatch[1]);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) return res.status(404).json({ error: 'Заказ не найден.' });
-      const data = docSnap.data()!;
-      const statusLog = [...(data.statusLog || []), { status, timestamp: getFormattedDate(), note: note || 'Статус обновлён.' }];
-      const updated = { ...data, status, statusLog, ...(paymentStatus && { paymentStatus }) };
-      await setDoc(docRef, updated);
-      return res.json({ success: true, order: updated });
+      const { data: order } = await supabase.from('orders').select('*').eq('order_id', statusMatch[1]).single();
+      if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
+      const statusLog = [...(order.status_log || []), { status, timestamp: getFormattedDate(), note: note || 'Статус обновлён.' }];
+      const { data } = await supabase.from('orders').update({ status, status_log: statusLog, ...(paymentStatus && { payment_status: paymentStatus }) }).eq('order_id', statusMatch[1]).select().single();
+      return res.json({ success: true, order: data });
     }
 
     // GET /api/reviews
     if (url === '/api/reviews' && method === 'GET') {
-      const snap = await getDocs(collection(db, 'reviews'));
-      return res.json(snap.docs.map(d => d.data()));
+      const { data } = await supabase.from('reviews').select('*').order('id', { ascending: false });
+      return res.json(data || []);
     }
 
     // POST /api/reviews
     if (url === '/api/reviews' && method === 'POST') {
       const { author, rating, comment } = req.body;
       if (!author || !rating || !comment) return res.status(400).json({ error: 'Заполните все поля.' });
-      const id = `review-${Date.now()}`;
-      const newReview = { id, author, rating: Number(rating), comment, date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) };
-      await setDoc(doc(db, 'reviews', id), newReview);
-      return res.json({ success: true, review: newReview });
+      const { data } = await supabase.from('reviews').insert({ author, rating: Number(rating), comment, date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) }).select().single();
+      return res.json({ success: true, review: data });
     }
 
     // GET /api/categories
     if (url === '/api/categories' && method === 'GET') {
-      const snap = await getDocs(collection(db, 'categories'));
-      return res.json(snap.docs.map(d => d.data()));
+      const { data } = await supabase.from('categories').select('*');
+      return res.json(data || []);
     }
 
     // POST /api/categories
     if (url === '/api/categories' && method === 'POST') {
       const { id, label } = req.body;
       if (!id || !label) return res.status(400).json({ error: 'id и label обязательны.' });
-      await setDoc(doc(db, 'categories', id), { id, label });
+      await supabase.from('categories').upsert({ id, label });
       return res.json({ success: true });
     }
 
     // DELETE /api/categories/:id
     const catMatch = url.match(/^\/api\/categories\/([^/]+)$/);
     if (catMatch && method === 'DELETE') {
-      await deleteDoc(doc(db, 'categories', catMatch[1]));
+      await supabase.from('categories').delete().eq('id', catMatch[1]);
       return res.json({ success: true });
     }
 
