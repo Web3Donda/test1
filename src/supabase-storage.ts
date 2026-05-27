@@ -1,30 +1,31 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
-const BUCKET = 'product-images';
-
-let client: SupabaseClient | null = null;
-
-function getClient(): SupabaseClient {
-  if (client) return client;
-  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-  if (!url || !key) {
-    throw new Error('Supabase Storage не настроен: добавьте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в переменные окружения.');
-  }
-  client = createClient(url, key);
-  return client;
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1] || '');
+    };
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 export async function uploadProductImage(file: File): Promise<string> {
-  const supabase = getClient();
-  const ext = file.name.split('.').pop() || 'jpg';
-  const filename = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-  const { error } = await supabase.storage.from(BUCKET).upload(filename, file, {
-    cacheControl: '3600',
-    upsert: false,
-    contentType: file.type || undefined,
+  const dataBase64 = await fileToBase64(file);
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: file.name,
+      contentType: file.type || 'image/jpeg',
+      dataBase64,
+    }),
   });
-  if (error) throw error;
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename);
-  return data.publicUrl;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Сервер вернул ${res.status}`);
+  }
+  const { url } = await res.json();
+  if (!url) throw new Error('Сервер не вернул ссылку на изображение.');
+  return url;
 }

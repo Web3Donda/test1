@@ -145,6 +145,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true });
     }
 
+    // POST /api/upload — загрузка фото товара в Supabase Storage (серверный ключ)
+    if (url === '/api/upload' && method === 'POST') {
+      const { filename, contentType, dataBase64 } = req.body || {};
+      if (!dataBase64) return res.status(400).json({ error: 'Нет данных изображения.' });
+      const ext = String(filename || 'img.jpg').split('.').pop() || 'jpg';
+      const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const buffer = Buffer.from(dataBase64, 'base64');
+      const { error } = await supabase.storage.from('product-images').upload(path, buffer, {
+        contentType: contentType || 'image/jpeg',
+        upsert: false,
+      });
+      if (error) return res.status(500).json({ error: `Storage: ${error.message}` });
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      return res.json({ url: data.publicUrl });
+    }
+
     // POST /api/orders/:id/pay — тестовое подтверждение оплаты (без реальной ЮKassa)
     const payMatch = url.match(/^\/api\/orders\/([^/]+)\/pay$/);
     if (payMatch && method === 'POST') {
