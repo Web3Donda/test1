@@ -62,8 +62,7 @@ export const parseImageClassNameToStyle = (classNameStr: string = ''): React.CSS
   return style;
 };
 
-const vkIcon = '/src/assets/images/vk.png';
-const maxIcon = '/src/assets/images/max.webp';
+import vkIcon from './assets/images/vk.png';
 
 const MONTHS_RU = [
   { value: 'any', label: 'Все месяцы' },
