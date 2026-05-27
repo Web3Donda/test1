@@ -35,8 +35,12 @@ create table if not exists orders (
   status_log jsonb default '[]',
   payment_method text,
   payment_status text,
+  payment_id text,
   created_at timestamp default now()
 );
+
+-- Если таблица orders уже создана раньше — добавляем недостающий столбец
+alter table orders add column if not exists payment_id text;
 
 -- Таблица отзывов
 create table if not exists reviews (

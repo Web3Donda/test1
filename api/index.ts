@@ -195,21 +195,79 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true, order: mapOrder(data) });
     }
 
-    // GET /api/yookassa/check-payment/:id — статус оплаты заказа
+    // GET /api/yookassa/check-payment/:id — статус оплаты заказа (опрашиваем ЮKassa)
     const checkMatch = url.match(/^\/api\/yookassa\/check-payment\/([^/]+)$/);
     if (checkMatch && method === 'GET') {
       const { data: order } = await supabase.from('orders').select('*').eq('order_id', checkMatch[1]).single();
       if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
-      const paid = order.payment_status === 'paid';
-      return res.json({ success: true, status: paid ? 'succeeded' : 'pending', order: mapOrder(order) });
+
+      // Уже оплачен — ничего не спрашиваем
+      if (order.payment_status === 'paid') {
+        return res.json({ success: true, status: 'succeeded', order: mapOrder(order) });
+      }
+
+      const shopId = process.env.YOOKASSA_SHOP_ID;
+      const secret = process.env.YOOKASSA_SECRET_KEY;
+      if (order.payment_id && shopId && secret) {
+        try {
+          const auth = Buffer.from(`${shopId}:${secret}`).toString('base64');
+          const ykRes = await fetch(`https://api.yookassa.ru/v3/payments/${order.payment_id}`, {
+            headers: { Authorization: `Basic ${auth}` },
+          });
+          const payment: any = await ykRes.json();
+          if (ykRes.ok && payment.status === 'succeeded') {
+            const statusLog = [...(order.status_log || []), { status: order.status, timestamp: getFormattedDate(), note: 'Онлайн-оплата ЮKassa получена.' }];
+            const { data: updated } = await supabase.from('orders')
+              .update({ payment_status: 'paid', status_log: statusLog })
+              .eq('order_id', checkMatch[1]).select().single();
+            return res.json({ success: true, status: 'succeeded', order: mapOrder(updated) });
+          }
+          return res.json({ success: true, status: payment.status || 'pending', order: mapOrder(order) });
+        } catch {
+          return res.json({ success: true, status: 'pending', order: mapOrder(order) });
+        }
+      }
+      return res.json({ success: true, status: 'pending', order: mapOrder(order) });
     }
 
-    // POST /api/yookassa/create-payment — реальный редирект-платёж (нужны ключи ЮKassa)
+    // POST /api/yookassa/create-payment — создаём платёж и отдаём ссылку на оплату
     if (url === '/api/yookassa/create-payment' && method === 'POST') {
-      if (!process.env.YOOKASSA_SHOP_ID || !process.env.YOOKASSA_SECRET_KEY) {
-        return res.status(400).json({ error: 'Онлайн-оплата ЮKassa не настроена. Используйте тестовую форму оплаты картой.' });
+      const shopId = process.env.YOOKASSA_SHOP_ID;
+      const secret = process.env.YOOKASSA_SECRET_KEY;
+      if (!shopId || !secret) {
+        return res.status(400).json({ error: 'Онлайн-оплата ЮKassa не настроена.' });
       }
-      return res.status(501).json({ error: 'Интеграция с ЮKassa ещё не реализована.' });
+      const { orderId } = req.body || {};
+      if (!orderId) return res.status(400).json({ error: 'Не указан номер заказа.' });
+      const { data: order } = await supabase.from('orders').select('*').eq('order_id', orderId).single();
+      if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
+
+      const auth = Buffer.from(`${shopId}:${secret}`).toString('base64');
+      const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
+      const returnUrl = `${proto}://${req.headers.host}/?order=${encodeURIComponent(orderId)}`;
+      const idempotenceKey = `${orderId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      const ykRes = await fetch('https://api.yookassa.ru/v3/payments', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Idempotence-Key': idempotenceKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: { value: Number(order.total_price || 0).toFixed(2), currency: 'RUB' },
+          capture: true,
+          confirmation: { type: 'redirect', return_url: returnUrl },
+          description: `Заказ ${orderId} — Цветы Елизавета`,
+          metadata: { orderId },
+        }),
+      });
+      const payment: any = await ykRes.json();
+      if (!ykRes.ok) {
+        return res.status(502).json({ error: payment.description || 'Ошибка создания платежа ЮKassa.' });
+      }
+      await supabase.from('orders').update({ payment_id: payment.id }).eq('order_id', orderId);
+      return res.json({ confirmationUrl: payment.confirmation?.confirmation_url, paymentId: payment.id });
     }
 
     return res.status(404).json({ error: 'Not found' });
