@@ -3831,21 +3831,30 @@ export default function App() {
                                   </span>
                                 )}
 
-                                {order.paymentStatus === 'paid' ? (
-                                  <span className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg border border-emerald-200 text-[9.5px] font-extrabold uppercase tracking-widest flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                    Оплачен полностью ✓
-                                  </span>
-                                ) : order.paymentStatus === 'unpaid' ? (
-                                  <span className="bg-rose-50 text-rose-800 px-2.5 py-1 rounded-lg border border-rose-200 text-[9.5px] font-extrabold uppercase tracking-widest flex items-center gap-1 animate-pulse">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                                    Не оплачен (Ждет оплату ЮKassa)
-                                  </span>
+                                {order.paymentMethod === 'yookassa' ? (
+                                  order.paymentStatus === 'paid' ? (
+                                    <span className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg border border-emerald-200 text-[9.5px] font-extrabold uppercase tracking-widest flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                      ✓ Оплачено онлайн
+                                    </span>
+                                  ) : (
+                                    <span className="bg-rose-50 text-rose-800 px-2.5 py-1 rounded-lg border border-rose-200 text-[9.5px] font-extrabold uppercase tracking-widest flex items-center gap-1 animate-pulse">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                      🕓 Ждёт онлайн-оплату
+                                    </span>
+                                  )
                                 ) : (
-                                  <span className="bg-amber-50 text-amber-800 px-2.5 py-1 rounded-lg border border-amber-200 text-[9.5px] font-extrabold uppercase tracking-widest flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                    Ожидает СБП / Расчет при получении
-                                  </span>
+                                  order.paymentStatus === 'paid' ? (
+                                    <span className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg border border-emerald-200 text-[9.5px] font-extrabold uppercase tracking-widest flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                      ✓ Получено при выдаче
+                                    </span>
+                                  ) : (
+                                    <span className="bg-sky-50 text-sky-800 px-2.5 py-1 rounded-lg border border-sky-200 text-[9.5px] font-extrabold uppercase tracking-widest flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                                      💵 Оплата при получении
+                                    </span>
+                                  )
                                 )}
                               </div>
 
