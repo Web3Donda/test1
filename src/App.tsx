@@ -63,6 +63,7 @@ export const parseImageClassNameToStyle = (classNameStr: string = ''): React.CSS
 };
 
 import vkIcon from './assets/images/vk.png';
+import designShowcaseImg from './assets/images/flowerss.jpg';
 
 const MONTHS_RU = [
   { value: 'any', label: 'Все месяцы' },
@@ -1850,10 +1851,10 @@ export default function App() {
 
             {/* Showcase side layout card representing aesthetic floristry tips */}
             <div className="lg:col-span-5 h-[400px] bg-stone-100 rounded-[36px] overflow-hidden relative shadow-md">
-              <img 
-                src="/src/assets/images/flower_box_1779401201404.png" 
-                alt="Как хранить цветы Елизавета Челябинск" 
-                className="w-full h-full object-cover" 
+              <img
+                src={designShowcaseImg}
+                alt="Как хранить цветы Елизавета Челябинск"
+                className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-8 text-white">
                 <span className="serif text-2xl italic font-normal mb-1">Дизайнерское оформление</span>
