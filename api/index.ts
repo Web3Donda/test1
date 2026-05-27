@@ -270,6 +270,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ confirmationUrl: payment.confirmation?.confirmation_url, paymentId: payment.id });
     }
 
+    // POST /api/yookassa/webhook — уведомление от ЮKassa о смене статуса платежа
+    if (url === '/api/yookassa/webhook' && method === 'POST') {
+      try {
+        const paymentObj = (req.body && req.body.object) || {};
+        const paymentId = paymentObj.id;
+        const shopId = process.env.YOOKASSA_SHOP_ID;
+        const secret = process.env.YOOKASSA_SECRET_KEY;
+        // Не доверяем телу вслепую — перепроверяем платёж напрямую у ЮKassa
+        if (paymentId && shopId && secret) {
+          const auth = Buffer.from(`${shopId}:${secret}`).toString('base64');
+          const ykRes = await fetch(`https://api.yookassa.ru/v3/payments/${paymentId}`, {
+            headers: { Authorization: `Basic ${auth}` },
+          });
+          const payment: any = await ykRes.json();
+          const orderId = payment?.metadata?.orderId || paymentObj?.metadata?.orderId;
+          if (ykRes.ok && payment.status === 'succeeded' && orderId) {
+            const { data: order } = await supabase.from('orders').select('*').eq('order_id', orderId).single();
+            if (order && order.payment_status !== 'paid') {
+              const statusLog = [...(order.status_log || []), { status: order.status, timestamp: getFormattedDate(), note: 'Онлайн-оплата ЮKassa подтверждена (вебхук).' }];
+              await supabase.from('orders').update({ payment_status: 'paid', status_log: statusLog }).eq('order_id', orderId);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('YooKassa webhook error:', e);
+      }
+      // Всегда 200, иначе ЮKassa будет повторять отправку
+      return res.status(200).json({ received: true });
+    }
+
     return res.status(404).json({ error: 'Not found' });
   } catch (e: any) {
     console.error('API error:', e);
