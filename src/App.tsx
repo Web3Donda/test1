@@ -1967,7 +1967,7 @@ export default function App() {
                   <Truck className="w-5 h-5 text-[#5A5A40] flex-shrink-0" />
                   <div>
                     <h5 className="font-bold text-xs text-stone-800 uppercase tracking-wider">Районы доставки цветов:</h5>
-                    <p className="text-xs text-stone-600 mt-1">Вся городская территория Челябинска за 60-90 минут. Центральный, Северо-Запад, Северок, ЧМЗ, ЧТЗ, Ленинский, АМЗ и Копейск.</p>
+                    <p className="text-xs text-stone-600 mt-1">Вся городская территория Челябинска за 60-90 минут. Центральный, Северо-Запад, ЧМЗ, ЧТЗ, Ленинский, АМЗ и Копейск.</p>
                   </div>
                 </div>
 
