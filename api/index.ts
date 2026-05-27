@@ -145,6 +145,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true });
     }
 
+    // POST /api/orders/:id/pay — тестовое подтверждение оплаты (без реальной ЮKassa)
+    const payMatch = url.match(/^\/api\/orders\/([^/]+)\/pay$/);
+    if (payMatch && method === 'POST') {
+      const { data: order } = await supabase.from('orders').select('*').eq('order_id', payMatch[1]).single();
+      if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
+      const statusLog = [...(order.status_log || []), { status: order.status, timestamp: getFormattedDate(), note: 'Оплата получена (тестовый режим).' }];
+      const { data } = await supabase.from('orders')
+        .update({ payment_status: 'paid', status_log: statusLog })
+        .eq('order_id', payMatch[1]).select().single();
+      return res.json({ success: true, order: data });
+    }
+
+    // GET /api/yookassa/check-payment/:id — статус оплаты заказа
+    const checkMatch = url.match(/^\/api\/yookassa\/check-payment\/([^/]+)$/);
+    if (checkMatch && method === 'GET') {
+      const { data: order } = await supabase.from('orders').select('*').eq('order_id', checkMatch[1]).single();
+      if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
+      const paid = order.payment_status === 'paid';
+      return res.json({ success: true, status: paid ? 'succeeded' : 'pending', order });
+    }
+
+    // POST /api/yookassa/create-payment — реальный редирект-платёж (нужны ключи ЮKassa)
+    if (url === '/api/yookassa/create-payment' && method === 'POST') {
+      if (!process.env.YOOKASSA_SHOP_ID || !process.env.YOOKASSA_SECRET_KEY) {
+        return res.status(400).json({ error: 'Онлайн-оплата ЮKassa не настроена. Используйте тестовую форму оплаты картой.' });
+      }
+      return res.status(501).json({ error: 'Интеграция с ЮKassa ещё не реализована.' });
+    }
+
     return res.status(404).json({ error: 'Not found' });
   } catch (e: any) {
     console.error('API error:', e);

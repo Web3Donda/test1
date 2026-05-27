@@ -36,7 +36,7 @@ import {
 import { Product, CartItem, Review } from './types.js';
 import { productsList, reviewsList } from './data.js';
 import TransparentLogo from './components/TransparentLogo.js';
-import { uploadProductImage } from './firebase-storage.js';
+import { uploadProductImage } from './supabase-storage.js';
 
 export const parseImageClassNameToStyle = (classNameStr: string = ''): React.CSSProperties => {
   const style: React.CSSProperties = {
@@ -450,31 +450,68 @@ export default function App() {
       setProductForm(prev => ({ ...prev, imageSrc: url }));
       setProductFormError('');
     } catch (e) {
-      setProductFormError('Ошибка загрузки. Проверьте правила Firebase Storage.');
+      setProductFormError('Ошибка загрузки фото. Проверьте, что bucket "product-images" в Supabase создан и публичен.');
     }
   };
+
+  const defaultCategories = [
+    { id: 'flowers', label: 'Цветы поштучно' },
+    { id: 'greens', label: 'Декоративная зелень' },
+    { id: 'balloons', label: 'Гелиевые шары' },
+    { id: 'author', label: 'Авторские букеты' },
+    { id: 'roses', label: 'Пионовидные розы' },
+    { id: 'spring', label: 'Весенняя коллекция' },
+    { id: 'boxes', label: 'Шляпные коробки' }
+  ];
 
   const fetchProducts = async () => {
     try {
       const res = await fetch('/api/products');
+      if (!res.ok) throw new Error(`status ${res.status}`);
       const data = await res.json();
-      if (Array.isArray(data)) setProducts(data);
-    } catch { setProducts(productsList); }
+      if (Array.isArray(data) && data.length > 0) {
+        setProducts(data);
+        return;
+      }
+    } catch (err) {
+      console.error('Не удалось загрузить товары из базы — показываю локальный каталог.', err);
+    }
+    setProducts(productsList);
   };
 
   const fetchCategories = async () => {
-    setCategories([
-      { id: 'flowers', label: 'Цветы поштучно' },
-      { id: 'greens', label: 'Декоративная зелень' },
-      { id: 'balloons', label: 'Гелиевые шары' },
-      { id: 'author', label: 'Авторские букеты' },
-      { id: 'roses', label: 'Пионовидные розы' },
-      { id: 'spring', label: 'Весенняя коллекция' },
-      { id: 'boxes', label: 'Шляпные коробки' }
-    ]);
+    try {
+      const res = await fetch('/api/categories');
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setCategories(data.map((c: any) => ({ id: c.id, label: c.label })));
+        return;
+      }
+    } catch (err) {
+      console.error('Не удалось загрузить категории из базы — показываю значения по умолчанию.', err);
+    }
+    setCategories(defaultCategories);
   };
 
   const fetchReviews = async () => {
+    try {
+      const res = await fetch('/api/reviews');
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setReviews(data.map((r: any) => ({
+          id: String(r.id),
+          author: r.author,
+          rating: Number(r.rating),
+          comment: r.comment,
+          date: r.date,
+        })));
+        return;
+      }
+    } catch (err) {
+      console.error('Не удалось загрузить отзывы из базы — показываю локальные.', err);
+    }
     setReviews(reviewsList);
   };
 
