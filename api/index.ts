@@ -121,6 +121,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(mapOrder(data));
     }
 
+    // DELETE /api/orders/:id — удалить заказ
+    const orderDeleteMatch = url.match(/^\/api\/orders\/([^/]+)$/);
+    if (orderDeleteMatch && method === 'DELETE') {
+      await supabase.from('orders').delete().eq('order_id', orderDeleteMatch[1]);
+      return res.json({ success: true });
+    }
+
     // POST /api/orders/:id/status
     const statusMatch = url.match(/^\/api\/orders\/([^/]+)\/status$/);
     if (statusMatch && method === 'POST') {

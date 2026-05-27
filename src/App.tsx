@@ -988,6 +988,30 @@ export default function App() {
     }
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm(`Удалить заказ ${orderId}? Это действие необратимо.`)) return;
+    setAdminUpdatingId(orderId);
+    try {
+      const res = await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+      if (res.ok) {
+        knownOrderIdsRef.current.delete(orderId);
+        await fetchAdminOrders();
+        if (trackedOrder && trackedOrder.orderId === orderId) {
+          setIsTrackingOpen(false);
+          setTrackedOrder(null);
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Ошибка удаления заказа.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка соединения с сервером.');
+    } finally {
+      setAdminUpdatingId(null);
+    }
+  };
+
   const handleStartPayment = async (orderId: string, amount: number) => {
     setInitiatePaying(true);
     try {
@@ -3921,6 +3945,16 @@ export default function App() {
                                       Отменить оплату ↩
                                     </button>
                                   )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteOrder(order.orderId)}
+                                    disabled={adminUpdatingId === order.orderId}
+                                    className="ml-auto text-[9.5px] font-bold uppercase tracking-wider py-1 px-2.5 rounded-lg bg-white hover:bg-red-100 text-red-650 border border-red-200 transition-all cursor-pointer hover:scale-[1.01] flex items-center gap-1 shrink-0"
+                                    title="Удалить заказ из базы"
+                                  >
+                                    <X className="w-3 h-3" /> Удалить заказ
+                                  </button>
                                 </div>
                               </div>
                             </div>
