@@ -450,7 +450,8 @@ export default function App() {
       setProductForm(prev => ({ ...prev, imageSrc: url }));
       setProductFormError('');
     } catch (e) {
-      setProductFormError('Ошибка загрузки фото. Проверьте, что bucket "product-images" в Supabase создан и публичен.');
+      const msg = e instanceof Error ? e.message : String(e);
+      setProductFormError(`Ошибка загрузки фото: ${msg}`);
     }
   };
 
