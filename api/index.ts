@@ -12,6 +12,28 @@ function getFormattedDate() {
   return `${d.getDate()} ${months[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+// Приводим строку заказа из БД (snake_case) к формату фронта (camelCase)
+function mapOrder(o: any) {
+  if (!o) return o;
+  return {
+    orderId: o.order_id,
+    customerName: o.customer_name,
+    customerPhone: o.customer_phone,
+    deliveryType: o.delivery_type,
+    address: o.address,
+    date: o.date,
+    time: o.time,
+    cardMessage: o.card_message,
+    totalPrice: o.total_price,
+    items: o.items || [],
+    status: o.status,
+    statusLog: o.status_log || [],
+    paymentMethod: o.payment_method,
+    paymentStatus: o.payment_status,
+    createdAt: o.created_at,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
@@ -70,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // GET /api/orders
     if (url === '/api/orders' && method === 'GET') {
       const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-      return res.json(data || []);
+      return res.json((data || []).map(mapOrder));
     }
 
     // POST /api/order
@@ -96,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (orderMatch && method === 'GET') {
       const { data } = await supabase.from('orders').select('*').eq('order_id', orderMatch[1]).single();
       if (!data) return res.status(404).json({ error: 'Заказ не найден.' });
-      return res.json(data);
+      return res.json(mapOrder(data));
     }
 
     // POST /api/orders/:id/status
@@ -107,7 +129,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
       const statusLog = [...(order.status_log || []), { status, timestamp: getFormattedDate(), note: note || 'Статус обновлён.' }];
       const { data } = await supabase.from('orders').update({ status, status_log: statusLog, ...(paymentStatus && { payment_status: paymentStatus }) }).eq('order_id', statusMatch[1]).select().single();
-      return res.json({ success: true, order: data });
+      return res.json({ success: true, order: mapOrder(data) });
     }
 
     // GET /api/reviews
@@ -170,7 +192,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data } = await supabase.from('orders')
         .update({ payment_status: 'paid', status_log: statusLog })
         .eq('order_id', payMatch[1]).select().single();
-      return res.json({ success: true, order: data });
+      return res.json({ success: true, order: mapOrder(data) });
     }
 
     // GET /api/yookassa/check-payment/:id — статус оплаты заказа
@@ -179,7 +201,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: order } = await supabase.from('orders').select('*').eq('order_id', checkMatch[1]).single();
       if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
       const paid = order.payment_status === 'paid';
-      return res.json({ success: true, status: paid ? 'succeeded' : 'pending', order });
+      return res.json({ success: true, status: paid ? 'succeeded' : 'pending', order: mapOrder(order) });
     }
 
     // POST /api/yookassa/create-payment — реальный редирект-платёж (нужны ключи ЮKassa)

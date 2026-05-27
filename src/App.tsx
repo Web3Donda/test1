@@ -793,12 +793,46 @@ export default function App() {
     setIsProductFormOpen(true);
   };
 
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playNewOrderDing = () => {
+    try {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      // Двухтональный «динь-дон»
+      ([[880, 0], [1320, 0.16]] as [number, number][]).forEach(([freq, offset]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.35, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.45);
+      });
+    } catch {}
+  };
+
   const fetchAdminOrders = async (silent = false) => {
     if (!silent) setAdminLoading(true);
     try {
       const res = await fetch('/api/orders');
       if (res.ok) {
         const data = await res.json();
+        const incomingIds: string[] = (data || []).map((o: any) => o.orderId).filter(Boolean);
+        // Если появился заказ, которого не было — играем «дзынь» (но не на самой первой загрузке)
+        if (knownOrderIdsRef.current.size > 0 && incomingIds.some(id => !knownOrderIdsRef.current.has(id))) {
+          playNewOrderDing();
+        }
+        knownOrderIdsRef.current = new Set(incomingIds);
         setAdminOrders(data);
       }
     } catch (err) {
@@ -811,6 +845,14 @@ export default function App() {
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isAdminOpen) {
+      // Разблокируем звук в рамках пользовательского жеста (открытие админки)
+      try {
+        const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+        if (Ctx) {
+          if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+          if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+        }
+      } catch {}
       fetchAdminOrders(false);
       interval = setInterval(() => {
         fetchAdminOrders(true);
