@@ -1265,7 +1265,7 @@ export default function App() {
 
       const result = await res.json();
       if (result.success) {
-        setOrderResult(result);
+        setOrderResult({ ...result, paymentMethod: checkoutForm.paymentMethod, totalPrice });
         setCart([]); // Clear cart upon successful layout order!
         
         // Save to my recent orders list in state & localStorage
