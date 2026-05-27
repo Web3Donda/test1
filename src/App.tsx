@@ -455,19 +455,28 @@ export default function App() {
   };
 
   const fetchProducts = async () => {
-    setProducts(productsList);
+    try {
+      const res = await fetch('/api/products');
+      const data = await res.json();
+      if (Array.isArray(data)) setProducts(data);
+    } catch { setProducts(productsList); }
   };
 
   const fetchCategories = async () => {
-    setCategories([
-      { id: 'flowers', label: 'Цветы поштучно' },
-      { id: 'greens', label: 'Декоративная зелень' },
-      { id: 'balloons', label: 'Гелиевые шары' },
-      { id: 'author', label: 'Авторские букеты' },
-      { id: 'roses', label: 'Пионовидные розы' },
-      { id: 'spring', label: 'Весенняя коллекция' },
-      { id: 'boxes', label: 'Шляпные коробки' }
-    ]);
+    try {
+      const res = await fetch('/api/categories');
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) setCategories(data);
+    } catch {
+      setCategories([
+        { id: 'flowers', label: 'Цветы поштучно' },
+        { id: 'greens', label: 'Декоративная зелень' },
+        { id: 'balloons', label: 'Гелиевые шары' },
+        { id: 'author', label: 'Авторские букеты' },
+        { id: 'roses', label: 'Пионовидные розы' },
+        { id: 'spring', label: 'Весенняя коллекция' },
+        { id: 'boxes', label: 'Шляпные коробки' }
+      ]);
   };
 
   const fetchReviews = async () => {
