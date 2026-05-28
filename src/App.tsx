@@ -1681,7 +1681,7 @@ export default function App() {
                 className="bg-white rounded-[32px] overflow-hidden card-shadow card-shadow-hover transition-all duration-300 group flex flex-col justify-between"
               >
                 {/* Product Header / Visual Thumbnail */}
-                <div className="relative h-64 overflow-hidden bg-stone-100 cursor-pointer" onClick={() => setSelectedDetailProduct(p)}>
+                <div className="relative aspect-[4/5] overflow-hidden bg-stone-100 cursor-pointer" onClick={() => setSelectedDetailProduct(p)}>
                   <img 
                     src={p.imageSrc} 
                     alt={p.name} 
@@ -2481,7 +2481,7 @@ export default function App() {
           <div className="bg-white rounded-[32px] max-w-2xl w-full card-shadow relative overflow-hidden flex flex-col md:flex-row my-8 animate-fade-in">
             
             {/* Visual Part */}
-            <div className="md:w-1/2 h-64 md:h-auto relative bg-stone-100 overflow-hidden">
+            <div className="md:w-1/2 aspect-[4/5] md:aspect-auto md:h-auto relative bg-stone-100 overflow-hidden">
               <img 
                 src={selectedDetailProduct.imageSrc} 
                 alt={selectedDetailProduct.name} 
