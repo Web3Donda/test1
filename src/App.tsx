@@ -2935,7 +2935,7 @@ export default function App() {
 
                   <div>
                     <h5 className="font-bold text-xs text-stone-800 uppercase tracking-widest border-b border-stone-200 pb-2 mb-3">4. Дата и интервал времени</h5>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-[10px] text-stone-400 uppercase tracking-widest font-bold block mb-1">Желаемая дата:</label>
                         <input 
