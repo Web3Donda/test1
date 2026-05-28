@@ -190,6 +190,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ url: data.publicUrl });
     }
 
+    // POST /api/migrate-images — одноразовая миграция base64 → Supabase Storage
+    // Чинит фото товаров, которые лежат в БД как data:image/...;base64,... —
+    // на мобильном Safari такие строки больше ~2 МБ молча не рендерятся.
+    if (url === '/api/migrate-images' && method === 'POST') {
+      const { token } = req.body || {};
+      if (token !== 'fix-mobile-images-2026-elizaveta') {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+
+      const { data: products, error: fetchErr } = await supabase.from('products').select('id, "imageSrc"');
+      if (fetchErr) return res.status(500).json({ error: `Fetch: ${fetchErr.message}` });
+
+      const migrated: any[] = [];
+      const skippedBroken: any[] = [];
+      const failed: any[] = [];
+      let alreadyOk = 0;
+
+      for (const p of products || []) {
+        const src: string = p.imageSrc || '';
+
+        if (src.startsWith('data:')) {
+          const match = src.match(/^data:([^;]+);base64,(.+)$/);
+          if (!match) {
+            skippedBroken.push({ id: p.id, reason: 'invalid data URL' });
+            continue;
+          }
+          const contentType = match[1] || 'image/jpeg';
+          const base64 = match[2];
+          const ext = (contentType.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '') || 'jpg';
+          const path = `products/migrated-${p.id}-${Date.now()}.${ext}`;
+          const buffer = Buffer.from(base64, 'base64');
+
+          const { error: upErr } = await supabase.storage
+            .from('product-images')
+            .upload(path, buffer, { contentType, upsert: false });
+          if (upErr) {
+            failed.push({ id: p.id, step: 'upload', error: upErr.message });
+            continue;
+          }
+
+          const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+          const publicUrl = urlData.publicUrl;
+
+          const { error: updErr } = await supabase
+            .from('products')
+            .update({ imageSrc: publicUrl })
+            .eq('id', p.id);
+          if (updErr) {
+            failed.push({ id: p.id, step: 'db-update', error: updErr.message });
+            continue;
+          }
+
+          migrated.push({ id: p.id, bytes: buffer.length, url: publicUrl });
+        } else if (src.startsWith('/src/assets/')) {
+          // Dev-only Vite paths — в проде не существуют, надо перезагрузить вручную через админку.
+          skippedBroken.push({ id: p.id, reason: 'dev-only path, re-upload via admin', src });
+        } else {
+          alreadyOk++;
+        }
+      }
+
+      return res.json({
+        success: true,
+        summary: {
+          total: (products || []).length,
+          migrated: migrated.length,
+          alreadyOk,
+          skippedBroken: skippedBroken.length,
+          failed: failed.length,
+        },
+        migrated,
+        skippedBroken,
+        failed,
+      });
+    }
+
     // POST /api/orders/:id/pay — тестовое подтверждение оплаты (без реальной ЮKassa)
     const payMatch = url.match(/^\/api\/orders\/([^/]+)\/pay$/);
     if (payMatch && method === 'POST') {
