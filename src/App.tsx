@@ -2494,12 +2494,12 @@ export default function App() {
             {/* Context spec part */}
             <div className="p-8 md:w-1/2 flex flex-col justify-between">
               <div>
-                <button 
+                <button
                   onClick={() => setSelectedDetailProduct(null)}
-                  className="absolute top-6 right-6 p-2 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-800 transition-colors"
+                  className="absolute top-4 right-4 z-10 p-2.5 rounded-full bg-white/90 backdrop-blur-sm shadow-md text-stone-700 hover:bg-white hover:text-stone-900 transition-colors"
                   aria-label="Закрыть подробности"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" strokeWidth={2.5} />
                 </button>
 
                 <span className="text-[#5A5A40] text-[9px] font-bold uppercase tracking-widest block mb-1">Флористическая карта</span>
