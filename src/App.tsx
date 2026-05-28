@@ -2477,8 +2477,8 @@ export default function App() {
 
       {/* ─── MODAL: DETAILED PRODUCT SPECIFICATIONS ─── */}
       {selectedDetailProduct && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] max-w-2xl w-full card-shadow relative overflow-hidden flex flex-col md:flex-row my-8 animate-fade-in">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-[32px] max-w-2xl w-full card-shadow relative overflow-hidden flex flex-col md:flex-row my-4 md:my-8 animate-fade-in">
             
             {/* Visual Part */}
             <div className="md:w-1/2 aspect-[4/5] md:aspect-auto md:h-auto relative bg-stone-100 overflow-hidden">
