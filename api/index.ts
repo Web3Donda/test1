@@ -106,6 +106,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const method = req.method || 'GET';
 
   try {
+    // GET /api/diag — какие env-переменные видит функция (только наличие, без значений)
+    if (url === '/api/diag' && method === 'GET') {
+      return res.json({
+        SUPABASE_URL: !!process.env.SUPABASE_URL,
+        SUPABASE_KEY: !!process.env.SUPABASE_KEY,
+        TIMEWEB_S3_KEY: !!process.env.TIMEWEB_S3_KEY,
+        TIMEWEB_S3_SECRET: !!process.env.TIMEWEB_S3_SECRET,
+        YOOKASSA_SHOP_ID: !!process.env.YOOKASSA_SHOP_ID,
+        YOOKASSA_SECRET_KEY: !!process.env.YOOKASSA_SECRET_KEY,
+        ADMIN_PIN: !!process.env.ADMIN_PIN,
+        ADMIN_PIN_LENGTH: (process.env.ADMIN_PIN || '').length,
+        all_env_keys_starting_with_ADMIN: Object.keys(process.env).filter(k => k.startsWith('ADMIN')),
+      });
+    }
+
     // POST /api/admin/login — обмен PIN на 7-дневный HMAC-токен админки.
     if (url === '/api/admin/login' && method === 'POST') {
       const { pin } = req.body || {};
