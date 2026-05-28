@@ -1,10 +1,37 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_KEY!
 );
+
+// Timeweb Cloud S3 (российский CDN — нужен чтобы фото грузились с мобильных
+// операторов без ВПН, т.к. Supabase Storage живёт на AWS и операторы его режут).
+const TIMEWEB_BUCKET = 'elizaveta';
+const TIMEWEB_PUBLIC_BASE = `https://${TIMEWEB_BUCKET}.s3.twcstorage.ru`;
+
+const timewebS3 = process.env.TIMEWEB_S3_KEY ? new S3Client({
+  region: 'ru-1',
+  endpoint: 'https://s3.twcstorage.ru',
+  credentials: {
+    accessKeyId: process.env.TIMEWEB_S3_KEY,
+    secretAccessKey: process.env.TIMEWEB_S3_SECRET || '',
+  },
+  forcePathStyle: false,
+}) : null;
+
+async function uploadToTimeweb(key: string, body: Buffer, contentType: string): Promise<string> {
+  if (!timewebS3) throw new Error('Timeweb S3 не настроен (нет TIMEWEB_S3_KEY).');
+  await timewebS3.send(new PutObjectCommand({
+    Bucket: TIMEWEB_BUCKET,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  }));
+  return `${TIMEWEB_PUBLIC_BASE}/${key}`;
+}
 
 function getFormattedDate() {
   const d = new Date();
@@ -174,20 +201,77 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true });
     }
 
-    // POST /api/upload — загрузка фото товара в Supabase Storage (серверный ключ)
+    // POST /api/upload — загрузка фото товара в Timeweb S3 (российский CDN)
     if (url === '/api/upload' && method === 'POST') {
       const { filename, contentType, dataBase64 } = req.body || {};
       if (!dataBase64) return res.status(400).json({ error: 'Нет данных изображения.' });
       const ext = String(filename || 'img.jpg').split('.').pop() || 'jpg';
-      const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const key = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const buffer = Buffer.from(dataBase64, 'base64');
-      const { error } = await supabase.storage.from('product-images').upload(path, buffer, {
-        contentType: contentType || 'image/jpeg',
-        upsert: false,
-      });
-      if (error) return res.status(500).json({ error: `Storage: ${error.message}` });
-      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-      return res.json({ url: data.publicUrl });
+      try {
+        const publicUrl = await uploadToTimeweb(key, buffer, contentType || 'image/jpeg');
+        return res.json({ url: publicUrl });
+      } catch (e: any) {
+        return res.status(500).json({ error: `Timeweb: ${e.message}` });
+      }
+    }
+
+    // POST /api/migrate-to-timeweb — одноразовый перенос всех фото товаров
+    // с Supabase/Unsplash на Timeweb S3 (российский CDN, открывается без ВПН).
+    if (url === '/api/migrate-to-timeweb' && method === 'POST') {
+      const { token } = req.body || {};
+      if (token !== 'fix-mobile-images-2026-elizaveta') {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+      if (!timewebS3) {
+        return res.status(500).json({ error: 'Timeweb S3 не настроен на Vercel (нет TIMEWEB_S3_KEY/SECRET).' });
+      }
+
+      const { data: products, error: fetchErr } = await supabase
+        .from('products')
+        .select('id, name, "imageSrc"');
+      if (fetchErr) return res.status(500).json({ error: `Fetch: ${fetchErr.message}` });
+
+      const results = await Promise.all((products || []).map(async (p: any) => {
+        const src: string = p.imageSrc || '';
+
+        if (src.includes('twcstorage.ru')) return { id: p.id, status: 'already-timeweb' };
+        if (!src || src.startsWith('/src/')) return { id: p.id, status: 'skipped-broken', src };
+
+        try {
+          const imgRes = await fetch(src);
+          if (!imgRes.ok) return { id: p.id, status: 'download-failed', code: imgRes.status };
+          const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+          const arrayBuffer = await imgRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+
+          const extRaw = (contentType.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '').slice(0, 5);
+          const ext = extRaw || 'jpg';
+          const key = `products/${p.id}-${Date.now()}.${ext}`;
+
+          const publicUrl = await uploadToTimeweb(key, buffer, contentType);
+
+          const { error: updErr } = await supabase
+            .from('products')
+            .update({ imageSrc: publicUrl })
+            .eq('id', p.id);
+          if (updErr) return { id: p.id, status: 'db-update-failed', error: updErr.message };
+
+          return { id: p.id, name: p.name, status: 'migrated', bytes: buffer.length, url: publicUrl };
+        } catch (e: any) {
+          return { id: p.id, status: 'error', error: e.message };
+        }
+      }));
+
+      const summary = {
+        total: results.length,
+        migrated: results.filter(r => r.status === 'migrated').length,
+        alreadyTimeweb: results.filter(r => r.status === 'already-timeweb').length,
+        skippedBroken: results.filter(r => r.status === 'skipped-broken').length,
+        failed: results.filter(r => !['migrated', 'already-timeweb', 'skipped-broken'].includes(r.status)).length,
+      };
+
+      return res.json({ success: true, summary, results });
     }
 
     // POST /api/migrate-images — одноразовая миграция base64 → Supabase Storage
