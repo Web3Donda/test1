@@ -38,6 +38,22 @@ import { productsList, reviewsList } from './data.js';
 import TransparentLogo from './components/TransparentLogo.js';
 import { uploadProductImage } from './supabase-storage.js';
 
+// Шлёт fetch с заголовком авторизации админки. Если сервер вернул 401/403 —
+// чистим протухший токен, чтобы при следующем заходе PIN запросили заново.
+const adminFetch = (input: RequestInfo, init: RequestInit = {}): Promise<Response> => {
+  const token = localStorage.getItem('adminToken') || '';
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+    Authorization: `Bearer ${token}`,
+  };
+  return fetch(input, { ...init, headers }).then((res) => {
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem('adminToken');
+    }
+    return res;
+  });
+};
+
 export const parseImageClassNameToStyle = (classNameStr: string = ''): React.CSSProperties => {
   const style: React.CSSProperties = {
     objectFit: 'cover'
@@ -558,7 +574,7 @@ export default function App() {
       setProducts(productsWithNewOrder);
 
       try {
-        await fetch('/api/products/reorder', {
+        await adminFetch('/api/products/reorder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -590,7 +606,7 @@ export default function App() {
     setProducts(productsWithNewOrder);
 
     try {
-      await fetch('/api/products/reorder', {
+      await adminFetch('/api/products/reorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -619,7 +635,7 @@ export default function App() {
     setProducts(productsWithNewOrder);
 
     try {
-      await fetch('/api/products/reorder', {
+      await adminFetch('/api/products/reorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -651,7 +667,7 @@ export default function App() {
       const url = isEdit ? `/api/products/${productForm.id}` : '/api/products';
       const method = isEdit ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await adminFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -687,7 +703,7 @@ export default function App() {
     setIsCategorySaving(true);
 
     try {
-      const res = await fetch('/api/categories', {
+      const res = await adminFetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -714,7 +730,7 @@ export default function App() {
 
   const handleDeleteCategory = async (catId: string) => {
     try {
-      const res = await fetch(`/api/categories/${catId}`, {
+      const res = await adminFetch(`/api/categories/${catId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -824,7 +840,7 @@ export default function App() {
   const fetchAdminOrders = async (silent = false) => {
     if (!silent) setAdminLoading(true);
     try {
-      const res = await fetch('/api/orders');
+      const res = await adminFetch('/api/orders');
       if (res.ok) {
         const data = await res.json();
         const incomingIds: string[] = (data || []).map((o: any) => o.orderId).filter(Boolean);
@@ -936,7 +952,7 @@ export default function App() {
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
     setAdminUpdatingId(orderId);
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      const res = await adminFetch(`/api/orders/${orderId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, note: customStatusNote || undefined })
@@ -964,7 +980,7 @@ export default function App() {
   const handleUpdateOrderPaymentStatus = async (orderId: string, paymentStatus: string) => {
     setAdminUpdatingId(orderId);
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      const res = await adminFetch(`/api/orders/${orderId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentStatus })
@@ -992,7 +1008,7 @@ export default function App() {
     if (!window.confirm(`Удалить заказ ${orderId}? Это действие необратимо.`)) return;
     setAdminUpdatingId(orderId);
     try {
-      const res = await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+      const res = await adminFetch(`/api/orders/${orderId}`, { method: 'DELETE' });
       if (res.ok) {
         knownOrderIdsRef.current.delete(orderId);
         await fetchAdminOrders();
@@ -1048,7 +1064,7 @@ export default function App() {
   const handleConfirmYooKassaPayment = async (orderId: string) => {
     setIsYooKassaPaying(true);
     try {
-      const res = await fetch(`/api/orders/${orderId}/pay`, {
+      const res = await adminFetch(`/api/orders/${orderId}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2243,7 +2259,7 @@ export default function App() {
                   const id = productToDelete.id;
                   setProductToDelete(null);
                   try {
-                    const res = await fetch(`/api/products/${id}`, {
+                    const res = await adminFetch(`/api/products/${id}`, {
                       method: 'DELETE'
                     });
                     if (res.ok) {
@@ -3517,18 +3533,31 @@ export default function App() {
                         const updated = pinInput + btn.value;
                         setPinInput(updated);
                         setPinError('');
-                        if (updated === '1010') {
-                          // Correct code!
-                          setTimeout(() => {
-                            setIsAdminOpen(true);
-                            setIsPinModalOpen(false);
-                            setPinInput('');
-                          }, 250);
-                        } else if (updated.length === 4) {
-                          setTimeout(() => {
-                            setPinError('Неверный служебный код салона');
-                            setPinInput('');
-                          }, 1000);
+                        if (updated.length === 4) {
+                          (async () => {
+                            try {
+                              const res = await fetch('/api/admin/login', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ pin: updated }),
+                              });
+                              if (res.ok) {
+                                const { token } = await res.json();
+                                localStorage.setItem('adminToken', token);
+                                setIsAdminOpen(true);
+                                setIsPinModalOpen(false);
+                                setPinInput('');
+                              } else {
+                                setTimeout(() => {
+                                  setPinError('Неверный служебный код салона');
+                                  setPinInput('');
+                                }, 600);
+                              }
+                            } catch {
+                              setPinError('Сервер недоступен, попробуйте ещё раз.');
+                              setPinInput('');
+                            }
+                          })();
                         }
                       }
                     }

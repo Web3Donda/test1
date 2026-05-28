@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import crypto from 'crypto';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -31,6 +32,40 @@ async function uploadToTimeweb(key: string, body: Buffer, contentType: string): 
     ContentType: contentType,
   }));
   return `${TIMEWEB_PUBLIC_BASE}/${key}`;
+}
+
+// Авторизация админки: PIN проверяется на сервере, после успеха выдаём
+// подписанный HMAC-токен на 7 дней. Все защищённые эндпоинты сверяют его.
+const ADMIN_PIN = process.env.ADMIN_PIN || '';
+const ADMIN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function makeAdminToken(): string {
+  const ts = Date.now().toString();
+  const sig = crypto.createHmac('sha256', ADMIN_PIN).update(ts).digest('hex');
+  return `${ts}.${sig}`;
+}
+
+function verifyAdminToken(token: string): boolean {
+  if (!token || !ADMIN_PIN) return false;
+  const idx = token.indexOf('.');
+  if (idx <= 0) return false;
+  const ts = token.slice(0, idx);
+  const sig = token.slice(idx + 1);
+  const expected = crypto.createHmac('sha256', ADMIN_PIN).update(ts).digest('hex');
+  if (sig.length !== expected.length) return false;
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))) return false;
+  } catch { return false; }
+  const age = Date.now() - parseInt(ts, 10);
+  return age >= 0 && age < ADMIN_TOKEN_TTL_MS;
+}
+
+function requireAdmin(req: VercelRequest, res: VercelResponse): boolean {
+  const raw = (req.headers['authorization'] || req.headers['Authorization'] || '') as string;
+  const token = raw.startsWith('Bearer ') ? raw.slice(7) : raw;
+  if (verifyAdminToken(token)) return true;
+  res.status(403).json({ error: 'Доступ запрещён. Войдите с PIN-кодом администратора.' });
+  return false;
 }
 
 function getFormattedDate() {
@@ -71,6 +106,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const method = req.method || 'GET';
 
   try {
+    // POST /api/admin/login — обмен PIN на 7-дневный HMAC-токен админки.
+    if (url === '/api/admin/login' && method === 'POST') {
+      const { pin } = req.body || {};
+      if (!ADMIN_PIN) return res.status(500).json({ error: 'ADMIN_PIN не настроен на сервере.' });
+      const pinStr = typeof pin === 'string' ? pin : '';
+      if (pinStr.length !== ADMIN_PIN.length) return res.status(401).json({ error: 'Неверный код.' });
+      let match = false;
+      try { match = crypto.timingSafeEqual(Buffer.from(pinStr), Buffer.from(ADMIN_PIN)); } catch {}
+      if (!match) return res.status(401).json({ error: 'Неверный код.' });
+      return res.json({ token: makeAdminToken() });
+    }
+
     // GET /api/heartbeat — пинг по крону раз в 4 дня, не даёт Supabase Free
     // уйти в auto-pause после 7 дней неактивности.
     if (url === '/api/heartbeat' && method === 'GET') {
@@ -86,6 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // POST /api/products
     if (url === '/api/products' && method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       const { name, description, price, category, composition, tags, imageSrc, popular, imageClassName } = req.body;
       if (!name || price === undefined) return res.status(400).json({ error: 'Имя и цена обязательны.' });
       const { count } = await supabase.from('products').select('*', { count: 'exact', head: true });
@@ -105,26 +153,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // PUT /api/products/:id
     const productMatch = url.match(/^\/api\/products\/([^/]+)$/);
     if (productMatch && method === 'PUT') {
+      if (!requireAdmin(req, res)) return;
       const { data } = await supabase.from('products').update(req.body).eq('id', productMatch[1]).select().single();
       return res.json({ success: true, product: data });
     }
 
     // DELETE /api/products/:id
     if (productMatch && method === 'DELETE') {
+      if (!requireAdmin(req, res)) return;
       await supabase.from('products').delete().eq('id', productMatch[1]);
       return res.json({ success: true });
     }
 
     // POST /api/products/reorder
     if (url === '/api/products/reorder' && method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       for (const item of (req.body.orders || [])) {
         await supabase.from('products').update({ order: Number(item.order) }).eq('id', item.id);
       }
       return res.json({ success: true });
     }
 
-    // GET /api/orders
+    // GET /api/orders — содержит ПДн клиентов, только админка.
     if (url === '/api/orders' && method === 'GET') {
+      if (!requireAdmin(req, res)) return;
       const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
       return res.json((data || []).map(mapOrder));
     }
@@ -158,6 +210,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // DELETE /api/orders/:id — удалить заказ
     const orderDeleteMatch = url.match(/^\/api\/orders\/([^/]+)$/);
     if (orderDeleteMatch && method === 'DELETE') {
+      if (!requireAdmin(req, res)) return;
       await supabase.from('orders').delete().eq('order_id', orderDeleteMatch[1]);
       return res.json({ success: true });
     }
@@ -165,6 +218,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // POST /api/orders/:id/status
     const statusMatch = url.match(/^\/api\/orders\/([^/]+)\/status$/);
     if (statusMatch && method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       const { status, note, paymentStatus } = req.body;
       const { data: order } = await supabase.from('orders').select('*').eq('order_id', statusMatch[1]).single();
       if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
@@ -195,6 +249,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // POST /api/categories
     if (url === '/api/categories' && method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       const { id, label } = req.body;
       if (!id || !label) return res.status(400).json({ error: 'id и label обязательны.' });
       await supabase.from('categories').upsert({ id, label });
@@ -204,12 +259,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // DELETE /api/categories/:id
     const catMatch = url.match(/^\/api\/categories\/([^/]+)$/);
     if (catMatch && method === 'DELETE') {
+      if (!requireAdmin(req, res)) return;
       await supabase.from('categories').delete().eq('id', catMatch[1]);
       return res.json({ success: true });
     }
 
     // POST /api/upload — загрузка фото товара в Timeweb S3 (российский CDN)
     if (url === '/api/upload' && method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       const { filename, contentType, dataBase64 } = req.body || {};
       if (!dataBase64) return res.status(400).json({ error: 'Нет данных изображения.' });
       const ext = String(filename || 'img.jpg').split('.').pop() || 'jpg';
@@ -360,6 +417,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // POST /api/orders/:id/pay — тестовое подтверждение оплаты (без реальной ЮKassa)
     const payMatch = url.match(/^\/api\/orders\/([^/]+)\/pay$/);
     if (payMatch && method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       const { data: order } = await supabase.from('orders').select('*').eq('order_id', payMatch[1]).single();
       if (!order) return res.status(404).json({ error: 'Заказ не найден.' });
       const statusLog = [...(order.status_log || []), { status: order.status, timestamp: getFormattedDate(), note: 'Оплата получена (тестовый режим).' }];

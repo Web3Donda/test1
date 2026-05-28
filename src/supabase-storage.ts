@@ -12,15 +12,22 @@ function fileToBase64(file: File): Promise<string> {
 
 export async function uploadProductImage(file: File): Promise<string> {
   const dataBase64 = await fileToBase64(file);
+  const token = localStorage.getItem('adminToken') || '';
   const res = await fetch('/api/upload', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({
       filename: file.name,
       contentType: file.type || 'image/jpeg',
       dataBase64,
     }),
   });
+  if (res.status === 401 || res.status === 403) {
+    localStorage.removeItem('adminToken');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Сервер вернул ${res.status}`);
