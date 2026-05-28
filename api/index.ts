@@ -71,6 +71,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const method = req.method || 'GET';
 
   try {
+    // GET /api/heartbeat — пинг по крону раз в 4 дня, не даёт Supabase Free
+    // уйти в auto-pause после 7 дней неактивности.
+    if (url === '/api/heartbeat' && method === 'GET') {
+      const { count } = await supabase.from('products').select('*', { count: 'exact', head: true });
+      return res.json({ ok: true, products: count, at: new Date().toISOString() });
+    }
+
     // GET /api/products
     if (url === '/api/products' && method === 'GET') {
       const { data } = await supabase.from('products').select('*').order('order');
