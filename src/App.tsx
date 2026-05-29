@@ -233,12 +233,14 @@ export default function App() {
     name: '',
     phone: '',
     deliveryType: 'delivery' as 'delivery' | 'pickup',
+    // При доставке доступна только онлайн-оплата ЮKassa (требование салона).
+    // Кэш-вариант появляется только при самовывозе.
     address: '',
     date: new Date().toISOString().split('T')[0],
     time: '12:00 - 14:00',
     cardMessage: '',
     district: 'leninsky',
-    paymentMethod: 'cash' as 'cash' | 'yookassa'
+    paymentMethod: 'yookassa' as 'cash' | 'yookassa'
   });
   const [orderProcessing, setOrderProcessing] = useState<boolean>(false);
   const [isTermsAccepted, setIsTermsAccepted] = useState<boolean>(true);
@@ -2857,7 +2859,7 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <button 
                         type="button"
-                        onClick={() => setCheckoutForm({ ...checkoutForm, deliveryType: 'delivery' })}
+                        onClick={() => setCheckoutForm({ ...checkoutForm, deliveryType: 'delivery', paymentMethod: 'yookassa' })}
                         className={`py-3 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
                           checkoutForm.deliveryType === 'delivery'
                             ? 'bg-[#5A5A40] text-white border-[#5A5A40]'
@@ -2982,7 +2984,8 @@ export default function App() {
                   <div>
                     <h5 className="font-bold text-xs text-stone-800 uppercase tracking-widest border-b border-stone-200 pb-2 mb-3">5. Способ оплаты</h5>
                     <div className="space-y-2">
-                      <button 
+                      {checkoutForm.deliveryType === 'pickup' && (
+                      <button
                         type="button"
                         onClick={() => setCheckoutForm({ ...checkoutForm, paymentMethod: 'cash' })}
                         className={`w-full py-3 px-4 rounded-xl text-xs font-medium transition-all flex flex-col items-start gap-1 border text-left ${
@@ -2998,9 +3001,10 @@ export default function App() {
                           При получении
                         </div>
                         <span className="text-[10px] text-stone-450 pl-5 leading-normal">
-                          СБП, СПБ-перевод или картой курьеру при вручении / в салоне.
+                          СБП, СПБ-перевод или картой курьеру в салоне.
                         </span>
                       </button>
+                      )}
 
                       <button 
                         type="button"
