@@ -392,10 +392,10 @@ app.post('/api/yookassa/webhook', async (req, res) => {
 });
 
 // ─── static (built frontend) ─────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'dist')));
+app.use(express.static(path.join(__dirname, '..', 'dist')));
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
 });
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
