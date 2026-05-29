@@ -488,14 +488,11 @@ export default function App() {
       const res = await fetch('/api/products');
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        setProducts(data);
-        return;
-      }
+      setProducts(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Не удалось загрузить товары из базы — показываю локальный каталог.', err);
+      console.error('Не удалось загрузить товары из базы.', err);
+      setProducts([]);
     }
-    setProducts(productsList);
   };
 
   const fetchCategories = async () => {
@@ -518,20 +515,17 @@ export default function App() {
       const res = await fetch('/api/reviews');
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        setReviews(data.map((r: any) => ({
-          id: String(r.id),
-          author: r.author,
-          rating: Number(r.rating),
-          comment: r.comment,
-          date: r.date,
-        })));
-        return;
-      }
+      setReviews(Array.isArray(data) ? data.map((r: any) => ({
+        id: String(r.id),
+        author: r.author,
+        rating: Number(r.rating),
+        comment: r.comment,
+        date: r.date,
+      })) : []);
     } catch (err) {
-      console.error('Не удалось загрузить отзывы из базы — показываю локальные.', err);
+      console.error('Не удалось загрузить отзывы из базы.', err);
+      setReviews([]);
     }
-    setReviews(reviewsList);
   };
 
   // --- Dynamic Catalog Custom Reordering & Sorting Actions ---
