@@ -34,7 +34,6 @@ import {
   CreditCard
 } from 'lucide-react';
 import { Product, CartItem, Review } from './types.js';
-import { productsList, reviewsList } from './data.js';
 import TransparentLogo from './components/TransparentLogo.js';
 import { uploadProductImage } from './supabase-storage.js';
 
@@ -146,8 +145,8 @@ const getOrderDateInfo = (order: any, type: 'createdAt' | 'delivery') => {
 
 export default function App() {
   // Store lists in states
-  const [products, setProducts] = useState<Product[]>(productsList);
-  const [reviews, setReviews] = useState<Review[]>(reviewsList);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
 
   // Dynamic Categories State
   const [categories, setCategories] = useState<{ id: string; label: string }[]>([
