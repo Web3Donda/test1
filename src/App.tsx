@@ -1173,7 +1173,6 @@ export default function App() {
     setSelectedProductForCartSetup(null);
     setPendingCardMessage('');
     setPendingComment('');
-    setIsCartOpen(true); // Open the cart view right away for pleasant feedback
   };
 
   // Quick Direct Add to Cart without setup configuration (e.g. from recommended bots list)
@@ -1189,7 +1188,6 @@ export default function App() {
         quantity: 1
       }]);
     }
-    setIsCartOpen(true);
   };
 
   const removeFromCart = (productId: string) => {
