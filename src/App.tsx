@@ -3493,82 +3493,51 @@ export default function App() {
               <p className="text-stone-500 text-[11px] mt-1 font-sans">Требуется индентификационный код салона</p>
             </div>
 
-            {/* Simulated PIN Display */}
-            <div className="flex justify-center gap-3.5 mb-6">
-              {[0, 1, 2, 3].map((idx) => (
-                <div 
-                  key={idx} 
-                  className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
-                    pinInput.length > idx 
-                      ? 'bg-[#5A5A40] border-[#5A5A40] scale-110 shadow-xs' 
-                      : 'border-stone-300 bg-white'
-                  }`}
-                />
-              ))}
-            </div>
-
-            {/* PIN Code digits grid */}
-            <div className="grid grid-cols-3 gap-3 max-w-[240px] mx-auto mb-6">
-              {[
-                { label: '1', value: '1' }, { label: '2', value: '2' }, { label: '3', value: '3' },
-                { label: '4', value: '4' }, { label: '5', value: '5' }, { label: '6', value: '6' },
-                { label: '7', value: '7' }, { label: '8', value: '8' }, { label: '9', value: '9' },
-                { label: '⌫', value: 'backspace' }, { label: '0', value: '0' }, { label: 'C', value: 'clear' }
-              ].map((btn) => (
-                <button
-                  key={btn.label}
-                  type="button"
-                  onClick={() => {
-                    if (btn.value === 'clear') {
-                      setPinInput('');
-                      setPinError('');
-                    } else if (btn.value === 'backspace') {
-                      setPinInput((prev) => prev.slice(0, -1));
-                      setPinError('');
-                    } else {
-                      if (pinInput.length < 4) {
-                        const updated = pinInput + btn.value;
-                        setPinInput(updated);
-                        setPinError('');
-                        if (updated.length === 4) {
-                          (async () => {
-                            try {
-                              const res = await fetch('/api/admin/login', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ pin: updated }),
-                              });
-                              if (res.ok) {
-                                const { token } = await res.json();
-                                localStorage.setItem('adminToken', token);
-                                setIsAdminOpen(true);
-                                setIsPinModalOpen(false);
-                                setPinInput('');
-                              } else {
-                                setTimeout(() => {
-                                  setPinError('Неверный служебный код салона');
-                                  setPinInput('');
-                                }, 600);
-                              }
-                            } catch {
-                              setPinError('Сервер недоступен, попробуйте ещё раз.');
-                              setPinInput('');
-                            }
-                          })();
-                        }
-                      }
-                    }
-                  }}
-                  className={`w-14 h-14 rounded-full text-[#5A5A40] text-lg font-black tracking-widest transition-all shadow-xs border flex items-center justify-center cursor-pointer active:scale-90 ${
-                    btn.value === 'clear' || btn.value === 'backspace'
-                      ? 'bg-stone-200/60 border-stone-300 text-stone-600 hover:bg-stone-300/60'
-                      : 'bg-white border-stone-200/50 hover:bg-stone-100'
-                  }`}
-                >
-                  {btn.label}
-                </button>
-              ))}
-            </div>
+            {/* Password input */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const pwd = pinInput;
+                if (!pwd) return;
+                setPinError('');
+                try {
+                  const res = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin: pwd }),
+                  });
+                  if (res.ok) {
+                    const { token } = await res.json();
+                    localStorage.setItem('adminToken', token);
+                    setIsAdminOpen(true);
+                    setIsPinModalOpen(false);
+                    setPinInput('');
+                  } else {
+                    setPinError('Неверный пароль');
+                    setPinInput('');
+                  }
+                } catch {
+                  setPinError('Сервер недоступен, попробуйте ещё раз.');
+                }
+              }}
+              className="mb-4"
+            >
+              <input
+                type="password"
+                autoFocus
+                value={pinInput}
+                onChange={(e) => { setPinInput(e.target.value); setPinError(''); }}
+                placeholder="Введите пароль"
+                className="w-full bg-white text-stone-800 border border-stone-300 rounded-xl px-4 py-3 text-sm font-mono tracking-wider focus:outline-none focus:border-[#5A5A40] focus:ring-2 focus:ring-[#5A5A40]/20 mb-3"
+              />
+              <button
+                type="submit"
+                disabled={!pinInput}
+                className="w-full olive-bg hover:opacity-95 disabled:opacity-40 text-white py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-opacity"
+              >
+                Войти
+              </button>
+            </form>
 
             {pinError && (
               <p className="text-red-650 text-[11px] font-sans font-semibold animate-pulse mb-4">{pinError}</p>
