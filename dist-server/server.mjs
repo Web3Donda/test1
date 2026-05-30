@@ -1,35 +1,25 @@
 // server.ts
 import express from "express";
 import { Pool } from "pg";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from "crypto";
 import path from "path";
+import fs from "fs/promises";
 import { fileURLToPath } from "url";
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var pool = new Pool({
   connectionString: process.env.DATABASE_URL || "postgresql://elizaveta:elizaveta@localhost:5432/elizaveta"
 });
-var TIMEWEB_BUCKET = "elizaveta";
-var TIMEWEB_PUBLIC_BASE = `https://${TIMEWEB_BUCKET}.s3.twcstorage.ru`;
-var timewebS3 = process.env.TIMEWEB_S3_KEY ? new S3Client({
-  region: "ru-1",
-  endpoint: "https://s3.twcstorage.ru",
-  credentials: {
-    accessKeyId: process.env.TIMEWEB_S3_KEY,
-    secretAccessKey: process.env.TIMEWEB_S3_SECRET || ""
-  },
-  forcePathStyle: false
-}) : null;
-async function uploadToTimeweb(key, body, contentType) {
-  if (!timewebS3) throw new Error("Timeweb S3 \u043D\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D (\u043D\u0435\u0442 TIMEWEB_S3_KEY).");
-  await timewebS3.send(new PutObjectCommand({
-    Bucket: TIMEWEB_BUCKET,
-    Key: key,
-    Body: body,
-    ContentType: contentType
-  }));
-  return `${TIMEWEB_PUBLIC_BASE}/${key}`;
+var UPLOADS_DIR = path.resolve(__dirname, "..", "uploads");
+var UPLOADS_PRODUCTS_DIR = path.join(UPLOADS_DIR, "products");
+async function saveProductImage(filename, body, contentType) {
+  await fs.mkdir(UPLOADS_PRODUCTS_DIR, { recursive: true });
+  const extFromName = (filename.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const extFromType = (contentType.split("/")[1] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ext = extFromName.length >= 2 && extFromName.length <= 5 ? extFromName : extFromType || "jpg";
+  const key = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  await fs.writeFile(path.join(UPLOADS_PRODUCTS_DIR, key), body);
+  return `/uploads/products/${key}`;
 }
 var ADMIN_PIN = process.env.ADMIN_PIN || "";
 var ADMIN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1e3;
@@ -291,14 +281,12 @@ app.delete("/api/categories/:id", requireAdmin, async (req, res) => {
 app.post("/api/upload", requireAdmin, async (req, res) => {
   const { filename, contentType, dataBase64 } = req.body || {};
   if (!dataBase64) return res.status(400).json({ error: "\u041D\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445 \u0438\u0437\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u044F." });
-  const ext = String(filename || "img.jpg").split(".").pop() || "jpg";
-  const key = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
   const buffer = Buffer.from(dataBase64, "base64");
   try {
-    const publicUrl = await uploadToTimeweb(key, buffer, contentType || "image/jpeg");
-    res.json({ url: publicUrl });
+    const url = await saveProductImage(filename || "img.jpg", buffer, contentType || "image/jpeg");
+    res.json({ url });
   } catch (e) {
-    res.status(500).json({ error: `Timeweb: ${e.message}` });
+    res.status(500).json({ error: `Upload: ${e.message}` });
   }
 });
 app.get("/api/yookassa/check-payment/:id", async (req, res) => {
@@ -389,6 +377,7 @@ app.post("/api/yookassa/webhook", async (req, res) => {
   }
   res.status(200).json({ received: true });
 });
+app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "7d", immutable: true }));
 app.use(express.static(path.join(__dirname, "..", "dist")));
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) return next();

@@ -1,8 +1,8 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { Pool } from 'pg';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,28 +12,18 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://elizaveta:elizaveta@localhost:5432/elizaveta',
 });
 
-const TIMEWEB_BUCKET = 'elizaveta';
-const TIMEWEB_PUBLIC_BASE = `https://${TIMEWEB_BUCKET}.s3.twcstorage.ru`;
+// Фотки храним локально на VDS, отдаёт их сам Express через /uploads/...
+const UPLOADS_DIR = path.resolve(__dirname, '..', 'uploads');
+const UPLOADS_PRODUCTS_DIR = path.join(UPLOADS_DIR, 'products');
 
-const timewebS3 = process.env.TIMEWEB_S3_KEY ? new S3Client({
-  region: 'ru-1',
-  endpoint: 'https://s3.twcstorage.ru',
-  credentials: {
-    accessKeyId: process.env.TIMEWEB_S3_KEY,
-    secretAccessKey: process.env.TIMEWEB_S3_SECRET || '',
-  },
-  forcePathStyle: false,
-}) : null;
-
-async function uploadToTimeweb(key: string, body: Buffer, contentType: string): Promise<string> {
-  if (!timewebS3) throw new Error('Timeweb S3 не настроен (нет TIMEWEB_S3_KEY).');
-  await timewebS3.send(new PutObjectCommand({
-    Bucket: TIMEWEB_BUCKET,
-    Key: key,
-    Body: body,
-    ContentType: contentType,
-  }));
-  return `${TIMEWEB_PUBLIC_BASE}/${key}`;
+async function saveProductImage(filename: string, body: Buffer, contentType: string): Promise<string> {
+  await fs.mkdir(UPLOADS_PRODUCTS_DIR, { recursive: true });
+  const extFromName = (filename.split('.').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const extFromType = (contentType.split('/')[1] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const ext = (extFromName.length >= 2 && extFromName.length <= 5) ? extFromName : (extFromType || 'jpg');
+  const key = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  await fs.writeFile(path.join(UPLOADS_PRODUCTS_DIR, key), body);
+  return `/uploads/products/${key}`;
 }
 
 const ADMIN_PIN = process.env.ADMIN_PIN || '';
@@ -284,18 +274,16 @@ app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// ─── upload (Timeweb S3) ─────────────────────────────────────────────
+// ─── upload (локальное хранилище на VDS) ─────────────────────────────
 app.post('/api/upload', requireAdmin, async (req, res) => {
   const { filename, contentType, dataBase64 } = req.body || {};
   if (!dataBase64) return res.status(400).json({ error: 'Нет данных изображения.' });
-  const ext = String(filename || 'img.jpg').split('.').pop() || 'jpg';
-  const key = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
   const buffer = Buffer.from(dataBase64, 'base64');
   try {
-    const publicUrl = await uploadToTimeweb(key, buffer, contentType || 'image/jpeg');
-    res.json({ url: publicUrl });
+    const url = await saveProductImage(filename || 'img.jpg', buffer, contentType || 'image/jpeg');
+    res.json({ url });
   } catch (e: any) {
-    res.status(500).json({ error: `Timeweb: ${e.message}` });
+    res.status(500).json({ error: `Upload: ${e.message}` });
   }
 });
 
@@ -392,6 +380,7 @@ app.post('/api/yookassa/webhook', async (req, res) => {
 });
 
 // ─── static (built frontend) ─────────────────────────────────────────
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
 app.use(express.static(path.join(__dirname, '..', 'dist')));
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
