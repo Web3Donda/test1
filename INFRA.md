@@ -4,6 +4,25 @@
 
 ---
 
+## Где живёт код (3 копии)
+
+```
+1. У тебя на компе:  C:\Users\larry\Downloads\google\
+2. На GitHub:        https://github.com/Web3Donda/test1
+3. На сервере:       /opt/elizaveta/   (работающая копия)
+```
+
+Если потерял локальную папку — восстанови с GitHub:
+
+```bash
+cd C:\Users\larry\Downloads
+git clone https://github.com/Web3Donda/test1.git google
+cd google
+npm install
+```
+
+---
+
 ## Домен
 
 **reg.ru** — https://www.reg.ru/
