@@ -2879,12 +2879,27 @@ export default function App() {
 
                       <div>
                         <label className="text-[10px] text-stone-400 uppercase tracking-widest font-bold block mb-1">Телефон для подтверждения:</label>
-                        <input 
-                          type="tel" 
+                        <input
+                          type="tel"
                           required
+                          inputMode="numeric"
                           value={checkoutForm.phone}
-                          onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
-                          placeholder="+7 (999) 123-45-67"
+                          onChange={(e) => {
+                            let digits = e.target.value.replace(/\D/g, '');
+                            if (digits.startsWith('8')) digits = '7' + digits.slice(1);
+                            if (digits.length > 0 && !digits.startsWith('7')) digits = '7' + digits;
+                            digits = digits.slice(0, 11);
+                            let formatted = digits[0] || '';
+                            if (digits.length > 1) formatted += ' ' + digits.slice(1, 4);
+                            if (digits.length > 4) formatted += ' ' + digits.slice(4, 7);
+                            if (digits.length > 7) formatted += ' ' + digits.slice(7, 9);
+                            if (digits.length > 9) formatted += ' ' + digits.slice(9, 11);
+                            setCheckoutForm({ ...checkoutForm, phone: formatted });
+                          }}
+                          placeholder="7 999 123 45 67"
+                          pattern="7 \d{3} \d{3} \d{2} \d{2}"
+                          title="Введите 11 цифр номера, например 7 999 123 45 67"
+                          maxLength={16}
                           className="w-full bg-white text-stone-800 border border-stone-300 px-4 py-2.5 text-xs rounded-xl focus:outline-none focus:border-[#5A5A40] transition-colors"
                         />
                       </div>
