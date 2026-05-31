@@ -331,6 +331,41 @@ app.post('/api/yookassa/create-payment', async (req, res) => {
   const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
   const returnUrl = `${proto}://${req.headers.host}/?order=${encodeURIComponent(orderId)}`;
   const idempotenceKey = `${orderId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  // Чек по 54-ФЗ — обязателен в live-режиме ЮKassa.
+  // items: каждый товар + (если есть) платная доставка отдельной строкой.
+  const items: Array<any> = [];
+  for (const it of (order.items as any[] || [])) {
+    const qty = Number(it.quantity || 1);
+    const itemTotal = Number(it.product?.price || 0);
+    if (!itemTotal || !qty) continue;
+    items.push({
+      description: String(it.product?.name || 'Товар').slice(0, 128),
+      quantity: qty.toFixed(2),
+      amount: { value: itemTotal.toFixed(2), currency: 'RUB' },
+      vat_code: 1, // НДС не облагается (УСН / самозанятый)
+      payment_mode: 'full_prepayment',
+      payment_subject: 'commodity',
+    });
+  }
+  const itemsSum = items.reduce(
+    (s, it) => s + Number(it.amount.value) * Number(it.quantity),
+    0,
+  );
+  const deliveryPrice = Math.max(0, Number(order.total_price || 0) - itemsSum);
+  if (deliveryPrice > 0) {
+    items.push({
+      description: 'Доставка',
+      quantity: '1.00',
+      amount: { value: deliveryPrice.toFixed(2), currency: 'RUB' },
+      vat_code: 1,
+      payment_mode: 'full_prepayment',
+      payment_subject: 'service',
+    });
+  }
+  const customer: Record<string, string> = {};
+  const phoneDigits = String(order.customer_phone || '').replace(/\D/g, '');
+  if (phoneDigits.length >= 10) customer.phone = phoneDigits;
+
   const ykRes = await fetch('https://api.yookassa.ru/v3/payments', {
     method: 'POST',
     headers: { Authorization: `Basic ${auth}`, 'Idempotence-Key': idempotenceKey, 'Content-Type': 'application/json' },
@@ -340,6 +375,17 @@ app.post('/api/yookassa/create-payment', async (req, res) => {
       confirmation: { type: 'redirect', return_url: returnUrl },
       description: `Заказ ${orderId} — Цветы Елизавета`,
       metadata: { orderId },
+      receipt: {
+        customer,
+        items: items.length ? items : [{
+          description: `Заказ ${orderId}`,
+          quantity: '1.00',
+          amount: { value: Number(order.total_price || 0).toFixed(2), currency: 'RUB' },
+          vat_code: 1,
+          payment_mode: 'full_prepayment',
+          payment_subject: 'commodity',
+        }],
+      },
     }),
   });
   const payment: any = await ykRes.json();
