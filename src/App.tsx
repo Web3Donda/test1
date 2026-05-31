@@ -1919,7 +1919,7 @@ export default function App() {
 
               <div>
                 <a 
-                  href="https://yandex.ru/maps/?text=Елизавета+Масленникова+6%2F1+Челябинск" 
+                  href="https://yandex.ru/maps/org/yelizaveta/221441427277/reviews/"
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-orange-50 hover:bg-[#ff3347] text-[#ff3347] hover:text-white border border-orange-200 hover:border-[#ff3347] text-xs font-bold rounded-2xl transition-all duration-300 shadow-sm"
