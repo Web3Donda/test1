@@ -362,9 +362,17 @@ app.post('/api/yookassa/create-payment', async (req, res) => {
       payment_subject: 'service',
     });
   }
+  // ЮKassa требует customer.phone в формате 79xxxxxxxxx (11 цифр, +7).
   const customer: Record<string, string> = {};
-  const phoneDigits = String(order.customer_phone || '').replace(/\D/g, '');
-  if (phoneDigits.length >= 10) customer.phone = phoneDigits;
+  let phoneDigits = String(order.customer_phone || '').replace(/\D/g, '');
+  if (phoneDigits.length === 11 && phoneDigits.startsWith('8')) phoneDigits = '7' + phoneDigits.slice(1);
+  if (phoneDigits.length === 10) phoneDigits = '7' + phoneDigits;
+  if (phoneDigits.length === 11 && phoneDigits.startsWith('7')) {
+    customer.phone = phoneDigits;
+  }
+  if (!customer.phone) {
+    return res.status(400).json({ error: 'Не указан корректный телефон покупателя (требуется для чека).' });
+  }
 
   const ykRes = await fetch('https://api.yookassa.ru/v3/payments', {
     method: 'POST',
