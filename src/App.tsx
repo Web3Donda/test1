@@ -804,20 +804,28 @@ export default function App() {
       const ctx = audioCtxRef.current;
       if (ctx.state === 'suspended') ctx.resume();
       const now = ctx.currentTime;
-      // Двухтональный «динь-дон»
-      ([[880, 0], [1320, 0.16]] as [number, number][]).forEach(([freq, offset]) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.0001, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.35, now + offset + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.4);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.45);
-      });
+      // Двухтональный «динь-дон», повторяем несколько раз — громче и дольше
+      const REPEATS = 3;       // сколько раз повторить «динь-дон»
+      const REPEAT_GAP = 0.6;  // пауза между повторами (сек)
+      const PEAK = 0.7;        // громкость (было 0.35)
+      const tones: [number, number][] = [[880, 0], [1320, 0.16]];
+      for (let r = 0; r < REPEATS; r++) {
+        const base = r * REPEAT_GAP;
+        tones.forEach(([freq, offset]) => {
+          const start = now + base + offset;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.0001, start);
+          gain.gain.exponentialRampToValueAtTime(PEAK, start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.4);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(start);
+          osc.stop(start + 0.45);
+        });
+      }
     } catch {}
   };
 
