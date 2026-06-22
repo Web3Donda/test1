@@ -228,6 +228,7 @@ export default function App() {
     time: '12:00 - 14:00',
     cardMessage: '',
     district: 'leninsky',
+    pickupBranch: 0,
     paymentMethod: 'yookassa' as 'cash' | 'yookassa'
   });
   const [orderProcessing, setOrderProcessing] = useState<boolean>(false);
@@ -1214,6 +1215,12 @@ export default function App() {
     remote: { name: 'В отдаленные районы (от 650 ₽)', price: 650 },
   };
 
+  // Салоны для самовывоза (coords: "долгота,широта" для Яндекс-виджета)
+  const PICKUP_BRANCHES = [
+    { name: 'ул. Масленникова, д. 6/1', coords: '61.466620,55.117669' },
+    { name: 'ул. Машиностроителей, д. 48', coords: '61.472694,55.120212' },
+  ];
+
   // Calculate prices
   const itemsSubtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   const discountAmount = Math.round(itemsSubtotal * (promoDiscount / 100));
@@ -1279,7 +1286,7 @@ export default function App() {
         deliveryType: checkoutForm.deliveryType,
         address: checkoutForm.deliveryType === 'delivery' 
           ? `[${DISTRICT_PRICES[checkoutForm.district]?.name || 'Ленинский район'}] ${checkoutForm.address}` 
-          : 'Самовывоз: ул. Масленникова, д. 6/1 (Салон)',
+          : `Самовывоз: ${PICKUP_BRANCHES[checkoutForm.pickupBranch]?.name || PICKUP_BRANCHES[0].name} (Салон)`,
         date: checkoutForm.date,
         time: checkoutForm.time,
         cardMessage: checkoutForm.cardMessage || cardMessageInput || undefined,
@@ -1955,7 +1962,7 @@ export default function App() {
               </h2>
 
               <p className="text-stone-600 text-sm leading-relaxed mb-8">
-                Наш салон находится в Челябинске по адресу ул. Масленникова, д. 6/1. Здесь вы можете забрать заказ самовывозом и лично проконсультироваться с нашими флористами.
+                У нас два салона в Челябинске: ул. Масленникова, д. 6/1 и ул. Машиностроителей, д. 48. В любом из них вы можете забрать заказ самовывозом и лично проконсультироваться с нашими флористами.
               </p>
 
               <div className="space-y-6">
@@ -1963,8 +1970,9 @@ export default function App() {
                 <div className="flex gap-4">
                   <MapPin className="w-5 h-5 text-[#5A5A40] flex-shrink-0" />
                   <div>
-                    <h5 className="font-bold text-xs text-stone-800 uppercase tracking-wider">Адрес салона:</h5>
+                    <h5 className="font-bold text-xs text-stone-800 uppercase tracking-wider">Адреса салонов:</h5>
                     <p className="text-xs text-stone-600 mt-1">г. Челябинск, ул. Масленникова, д. 6/1</p>
+                    <p className="text-xs text-stone-600 mt-1">г. Челябинск, ул. Машиностроителей, д. 48</p>
                   </div>
                 </div>
 
@@ -2011,7 +2019,7 @@ export default function App() {
               {/* Real Interactive Map Widget */}
               <div className="w-full h-96 bg-stone-100 rounded-3xl relative overflow-hidden flex flex-col border border-stone-200 shadow-inner group">
                 <iframe 
-                  src="https://yandex.ru/map-widget/v1/?ll=61.466620%2C55.117669&z=17&pt=61.466620%2C55.117669%2Cpm2rdm" 
+                  src="https://yandex.ru/map-widget/v1/?ll=61.469657%2C55.118940&z=15&pt=61.466620%2C55.117669%2Cpm2rdm~61.472694%2C55.120212%2Cpm2rdm"
                   className="w-full h-full border-0 rounded-t-3xl"
                   title="Салон цветов Елизавета на карте"
                   allowFullScreen
@@ -2021,8 +2029,8 @@ export default function App() {
                 {/* Bottom map summary banner */}
                 <div className="bg-white p-4 relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-t border-stone-100">
                   <div>
-                    <span className="font-bold text-xs text-stone-800">Ленинский район, ориентир:</span>
-                    <p className="text-[11px] text-stone-500">Улица Масленникова, д. 6/1 (салон «Елизавета»)</p>
+                    <span className="font-bold text-xs text-stone-800">Наши салоны «Елизавета»:</span>
+                    <p className="text-[11px] text-stone-500">ул. Масленникова, д. 6/1 и ул. Машиностроителей, д. 48</p>
                   </div>
                   <a 
                     href="https://2gis.ru/chelyabinsk/firm/70000001103005190" 
@@ -2057,8 +2065,9 @@ export default function App() {
           {/* Contact segment */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 text-xs font-sans text-white/60">
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2 font-bold font-sans">Адрес Салона</p>
+              <p className="text-[10px] uppercase tracking-widest text-white/40 mb-2 font-bold font-sans">Адреса салонов</p>
               <p className="leading-relaxed">г. Челябинск, ул. Масленникова, д. 6/1</p>
+              <p className="leading-relaxed mt-1">г. Челябинск, ул. Машиностроителей, д. 48</p>
               <p className="mt-1 font-serif italic text-white/80">Ежедневно с 08:00 до 21:00</p>
             </div>
 
@@ -2356,6 +2365,7 @@ export default function App() {
                       • ОГРНИП: 325745600113952<br />
                       • ИНН: 743203379680<br />
                       • Фактический адрес: г. Челябинск, ул. Масленникова, д. 6/1<br />
+                      • Адрес филиала: г. Челябинск, ул. Машиностроителей, д. 48<br />
                       • Телефон саппорта: +7 (951) 245-05-65
                     </p>
                   </div>
@@ -2807,7 +2817,7 @@ export default function App() {
                     Для защиты ваших данных и подтверждения заказа наш старший менеджер свяжется с вами по указанному номеру в течение 5-10 минут. Ваш заказ будет бережно передан во флористическую студию «Елизавета» для сборки.
                   </p>
                   <div className="bg-[#f5f5f0] p-3 rounded-lg text-[10px] text-stone-600 border border-stone-200/40">
-                    📍 Цветочный салон Елизавета: Челябинск, ул. Масленникова, д. 6/1 <br />
+                    📍 Цветочный салон Елизавета: Челябинск, ул. Масленникова, д. 6/1 и ул. Машиностроителей, д. 48 <br />
                     📞 Горячая линия поддержки: +7 (951) 245-05-65
                   </div>
                 </div>
@@ -2868,6 +2878,28 @@ export default function App() {
                         <MapPin className="w-3.5 h-3.5" /> Самовывоз
                       </button>
                     </div>
+
+                    {checkoutForm.deliveryType === 'pickup' && (
+                      <div className="animate-fade-in mt-3">
+                        <label className="text-[10px] text-stone-400 uppercase tracking-widest font-bold block mb-2">Салон для самовывоза:</label>
+                        <div className="space-y-2">
+                          {PICKUP_BRANCHES.map((branch, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setCheckoutForm({ ...checkoutForm, pickupBranch: idx })}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 border text-left ${
+                                checkoutForm.pickupBranch === idx
+                                  ? 'bg-[#5A5A40] text-white border-[#5A5A40]'
+                                  : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                              }`}
+                            >
+                              <MapPin className="w-3.5 h-3.5 shrink-0" /> г. Челябинск, {branch.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
